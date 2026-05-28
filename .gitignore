@@ -1,0 +1,33 @@
+# Dependency Directories (Never push this, cloud platforms install it fresh)
+node_modules/
+/package-lock.json (Optional: some keep it, but skip pushing if deploying containerized)
+
+# Env Secrets (CRITICAL - Absolute Security)
+.env
+.env.local
+.env.production
+.env.development
+*.env
+
+# Build & Compiled Output (If using TypeScript/Babel compilation)
+dist/
+build/
+out/
+
+# Debug and System Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+*.log
+
+# Local Uploads/Temporary Storage (Multer buffer storage file drop boundaries)
+uploads/
+temp/
+storage/
+
+# OS Specific Metadata
+.DS_Store
+.DS_Store?
+Thumbs.db
+ehthumbs.db
