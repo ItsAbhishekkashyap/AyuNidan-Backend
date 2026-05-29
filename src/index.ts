@@ -13,7 +13,7 @@ import routes from './routes/index';
 
 
 const app = express();
-const PORT = process.env.PORT || 5001;
+const PORT = process.env.PORT || 8080;
 
 app.use(compression());
 
@@ -60,7 +60,6 @@ app.use((err: any, req: any, res: any, next: any) => {
   console.log("🛑 [GLOBAL CRASH]:", err); // Ye asli error terminal me layega
   res.status(500).json({ success: false, error: err.message || "Internal server error" });
 });
-
 connectDB().then(() => {
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);

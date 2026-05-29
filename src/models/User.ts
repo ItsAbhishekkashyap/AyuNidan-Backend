@@ -3,6 +3,9 @@ import mongoose, { Schema, Document } from 'mongoose';
 export interface IUserDocument extends Document {
   email: string;
   name: string;
+  password?: string;
+  avatar?: string;
+  authProvider: 'local' | 'google';
   googleId?: string;
   consultations: mongoose.Types.ObjectId[];
   createdAt: Date;
@@ -25,6 +28,25 @@ const UserSchema = new Schema<IUserDocument>(
       required: true,
       trim: true,
     },
+
+    password:{
+      type: String,
+    },
+
+    avatar:{
+      type:String,
+      default: '',
+    },
+
+
+    authProvider:{
+      type: String,
+      enum: ['local', 'google'],
+      required: true,
+      default: 'local',
+    },
+
+    
     googleId: {
       type: String,
       sparse: true,

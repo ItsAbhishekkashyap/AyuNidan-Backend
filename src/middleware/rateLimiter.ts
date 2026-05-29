@@ -34,3 +34,5 @@ export const rateLimiter = (maxRequests: number, windowMs: number) => {
 export const aiRateLimiter = rateLimiter(10, 60 * 1000);   
 
 export const generalRateLimiter = rateLimiter(100, 60 * 1000); 
+
+

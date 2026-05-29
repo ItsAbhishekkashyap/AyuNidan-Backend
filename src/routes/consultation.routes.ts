@@ -10,19 +10,20 @@ import {
 } from '../controllers/consultation.controller';
 import { aiRateLimiter, generalRateLimiter } from '../middleware/rateLimiter';
 import { cacheMiddleware } from '../middleware/cache';
+import { authGuard } from '../middleware/auth'; // 🌟 FIX: Imported the auth guard
 
 const router = Router();
 
-router.get('/dashboard', generalRateLimiter, cacheMiddleware(60), getRiskDashboard);
+// 🔒 All these clinical endpoints now strictly require a valid JWT session token
+router.get('/dashboard', authGuard, generalRateLimiter, cacheMiddleware(60), getRiskDashboard);
+router.get('/explain', authGuard, explainTerm);
+
+router.post('/', authGuard, aiRateLimiter, createConsultation);
+router.get('/', authGuard, generalRateLimiter, cacheMiddleware(30), getConsultations);
+router.get('/:id', authGuard, cacheMiddleware(120), getConsultationById);
+router.delete('/:id', authGuard, generalRateLimiter, deleteConsultation);
+
+// Public utility or internal core admin systems (keep without check or add special role check if required)
 router.post('/seed-rag', seedDatabase); 
-router.get('/explain', explainTerm);
-
-router.post('/', aiRateLimiter, createConsultation);
-
-router.get('/', generalRateLimiter, cacheMiddleware(30), getConsultations);
-
-router.get('/:id', generalRateLimiter, cacheMiddleware(120), getConsultationById);
-
-router.delete('/:id', generalRateLimiter, deleteConsultation);
 
 export default router;

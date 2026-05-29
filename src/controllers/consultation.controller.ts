@@ -6,17 +6,32 @@ import { Types } from 'mongoose';
 import { explainMedicalTermRAG, seedMedicalKnowledgeBase } from '../services/rag.service';
 import { extractMedicalData } from '../services/ai.service';
 
+// ─── TYPESCRIPT MODULE OVERRIDE LAYER FOR EXPRESS REQUEST ───
+// This forces ts-node compilation thread to recognize custom session payloads cleanly
+declare module 'express-serve-static-core' {
+  interface Request {
+    user?: {
+      id: string;
+      email?: string;
+      name?: string;
+      role?: string;
+    };
+  }
+}
+
 export const createConsultation = async (
   req: Request,
   res: Response<ApiResponse<any>>
 ): Promise<void> => {
   try {
-    const { userId, rawText, voiceTranscript } = req.body;
+    // Priority assignment from authorized token session, falling back to body context
+    const resolvedUserId = req.user?.id || req.body.userId;
+    const { rawText, voiceTranscript } = req.body;
 
-    if (!userId || !Types.ObjectId.isValid(userId)) {
+    if (!resolvedUserId || !Types.ObjectId.isValid(resolvedUserId)) {
       res.status(400).json({
         success: false,
-        error: 'Valid User ID is required',
+        error: 'Valid User ID context is required',
       });
       return;
     }
@@ -37,7 +52,7 @@ export const createConsultation = async (
     const processingTime = Date.now() - startTime;
 
     const consultation = await Consultation.create({
-      userId,
+      userId: resolvedUserId,
       rawText: textToAnalyze,
       voiceTranscript,
       symptoms: extractedData.symptoms,    
@@ -65,11 +80,22 @@ export const getConsultations = async (
   res: Response<ApiResponse<any>>
 ): Promise<void> => {
   try {
+    const userId = req.user?.id;
+    
+    // 🌟 STRICTION FIX: If token fails unexpectedly, enforce strict empty lookup rather than full data leakage
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'User token verification context lost.' });
+      return;
+    }
+
     const page = parseInt(req.query.page as string, 10) || 1;
     const limit = parseInt(req.query.limit as string, 10) || 10;
     const skip = (page - 1) * limit;
 
-    const consultations = await Consultation.find()
+    // Isolate data lookup bound 100% strictly to current user token id
+    const queryFilter = { userId };
+
+    const consultations = await Consultation.find(queryFilter)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -91,7 +117,18 @@ export const getRiskDashboard = async (
   res: Response<ApiResponse<any>>
 ): Promise<void> => {
   try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'User token verification context lost.' });
+      return;
+    }
+
+    // 🌟 STRICTION FIX: Forcing aggregate layer to match strictly based on current login context
+    const matchStage = { $match: { userId: new Types.ObjectId(userId) } };
+
     const metrics = await Consultation.aggregate([
+      matchStage,
       {
         $group: {
           _id: '$riskLevel',
@@ -130,6 +167,7 @@ export const getConsultationById = async (
 ): Promise<void> => {
   try {
     const { id } = req.params;
+    const userId = req.user?.id;
 
     if (!Types.ObjectId.isValid(id as string)) {
       res.status(400).json({ success: false, error: 'Invalid ID format' });
@@ -140,6 +178,12 @@ export const getConsultationById = async (
 
     if (!consultation) {
       res.status(404).json({ success: false, error: 'Consultation not found' });
+      return;
+    }
+
+    // Verify token identity matching data context to prevent URL manipulation leak
+    if (userId && consultation.userId.toString() !== userId) {
+      res.status(403).json({ success: false, error: 'Unauthorized access to clinical diagnostic file' });
       return;
     }
 
@@ -156,10 +200,20 @@ export const deleteConsultation = async (
 ): Promise<void> => {
   try {
     const { id } = req.params;
+    const userId = req.user?.id;
 
     if (!Types.ObjectId.isValid(id as string)) {
       res.status(400).json({ success: false, error: 'Invalid ID format' });
       return;
+    }
+
+    // Verify item ownership first before wiping data documents
+    if (userId) {
+      const existingRecord = await Consultation.findById(id as string).select('userId').lean().exec();
+      if (existingRecord && existingRecord.userId.toString() !== userId) {
+        res.status(403).json({ success: false, error: 'Unauthorized mutation block' });
+        return;
+      }
     }
 
     const deleted = await Consultation.findByIdAndDelete(id as string).lean().exec();
