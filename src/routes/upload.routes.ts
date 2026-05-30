@@ -32,18 +32,15 @@ const upload = multer({
 router.post(
   "/",
   (req: Request, res: Response, next: NextFunction) => {
-    // TRACE 1: Did it even hit the route file?
-    console.log("\n🌐 [ROUTE LAYER] Request intercepted at /api/uploads");
+    
 
     upload.any()(req, res, (err: any) => {
       if (err) {
         console.error("🚨 [MULTER MIDDLEWARE CRASH]:", err.message);
         return res.status(400).json({ success: false, error: err.message });
       }
-      // TRACE 2: Did Multer survive?
-      console.log(
-        "✅ [MULTER LAYER] Form-data parsed successfully. Moving to Controller...",
-      );
+ 
+    
       next();
     });
   },

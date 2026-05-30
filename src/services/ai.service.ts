@@ -7,7 +7,7 @@ import { ExtractedEntities } from '../types';
 
 export const getModel = () => {
   if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim() !== '') {
-    // Keeping the original Vercel AI SDK structure intact so rag.service.ts compiles perfectly
+ 
     const google = createGoogleGenerativeAI({ apiKey: process.env.GEMINI_API_KEY });
     return google('gemini-2.5-flash-lite'); 
   }
@@ -88,23 +88,9 @@ export const extractMedicalData = async (
     };
 
   } catch (error: any) {
-    // ─── MASSIVE HIGH-DENSITY RADAR LOGGING START ───
-    console.log('\n======================================================');
-    console.log('🚨 [DEEP TRACE] CRASH INSIDE EXTRACT_MEDICAL_DATA');
-    console.log('======================================================');
-    console.log('➜ 1. Clean Error Message:', error?.message || error);
-    console.log('➜ 2. Error Status Code / Type:', error?.status || error?.statusCode || error?.name || 'N/A');
-    console.log('➜ 3. Complete Inner Object Dump (Exposing Hidden Fields):');
-    console.dir(error, { depth: null, colors: true });
-    if (error?.cause) {
-      console.log('➜ 3.1. Underlying Error Cause Stack:');
-      console.dir(error.cause, { depth: null, colors: true });
-    }
-    console.log('➜ 4. Error Stack Trace Pipeline:\n', error?.stack);
-    console.log('======================================================\n');
-    // ─── MASSIVE HIGH-DENSITY RADAR LOGGING END ───
-
-    console.error('🔥 AI Extraction Error:', error?.message || error);
+ 
+   
+   
     throw new Error(error?.message || 'Failed to process medical data via AI.');
   }
 };
@@ -120,7 +106,7 @@ export const generateClinicalSummary = async (
 ): Promise<{ summary: string; riskLevel: 'low' | 'medium' | 'high'; riskScore: number }> => {
   try {
     const model = getModel(); 
-    console.log('⚡ [AI SERVICE] Processing generateClinicalSummary execution thread...');
+    
     const { object } = await generateObject({
       model: model,
       schema: SummarySchema,
@@ -137,17 +123,7 @@ export const generateClinicalSummary = async (
 
     return object;
   } catch (error: any) {
-    // ─── MASSIVE HIGH-DENSITY RADAR LOGGING START ───
-    console.log('\n======================================================');
-    console.log('🚨 [DEEP TRACE] CRASH INSIDE GENERATE_CLINICAL_SUMMARY');
-    console.log('======================================================');
-    console.log('➜ 1. Clean Error Message:', error?.message || error);
-    console.log('➜ 2. Complete Inner Object Dump:');
-    console.dir(error, { depth: null, colors: true });
-    console.log('======================================================\n');
-    // ─── MASSIVE HIGH-DENSITY RADAR LOGGING END ───
-
-    console.error("Critical Summary Error:", error);
+   
     throw new Error("Failed to generate clinical summary");
   }
 };

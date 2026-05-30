@@ -6,8 +6,7 @@ import { Types } from 'mongoose';
 import { explainMedicalTermRAG, seedMedicalKnowledgeBase } from '../services/rag.service';
 import { extractMedicalData } from '../services/ai.service';
 
-// ─── TYPESCRIPT MODULE OVERRIDE LAYER FOR EXPRESS REQUEST ───
-// This forces ts-node compilation thread to recognize custom session payloads cleanly
+
 declare module 'express-serve-static-core' {
   interface Request {
     user?: {
@@ -24,7 +23,7 @@ export const createConsultation = async (
   res: Response<ApiResponse<any>>
 ): Promise<void> => {
   try {
-    // Priority assignment from authorized token session, falling back to body context
+  
     const resolvedUserId = req.user?.id || req.body.userId;
     const { rawText, voiceTranscript } = req.body;
 
@@ -82,7 +81,7 @@ export const getConsultations = async (
   try {
     const userId = req.user?.id;
     
-    // 🌟 STRICTION FIX: If token fails unexpectedly, enforce strict empty lookup rather than full data leakage
+   
     if (!userId) {
       res.status(401).json({ success: false, error: 'User token verification context lost.' });
       return;
@@ -92,7 +91,7 @@ export const getConsultations = async (
     const limit = parseInt(req.query.limit as string, 10) || 10;
     const skip = (page - 1) * limit;
 
-    // Isolate data lookup bound 100% strictly to current user token id
+ 
     const queryFilter = { userId };
 
     const consultations = await Consultation.find(queryFilter)
@@ -124,7 +123,7 @@ export const getRiskDashboard = async (
       return;
     }
 
-    // 🌟 STRICTION FIX: Forcing aggregate layer to match strictly based on current login context
+   
     const matchStage = { $match: { userId: new Types.ObjectId(userId) } };
 
     const metrics = await Consultation.aggregate([
@@ -181,7 +180,7 @@ export const getConsultationById = async (
       return;
     }
 
-    // Verify token identity matching data context to prevent URL manipulation leak
+ 
     if (userId && consultation.userId.toString() !== userId) {
       res.status(403).json({ success: false, error: 'Unauthorized access to clinical diagnostic file' });
       return;
@@ -207,7 +206,7 @@ export const deleteConsultation = async (
       return;
     }
 
-    // Verify item ownership first before wiping data documents
+
     if (userId) {
       const existingRecord = await Consultation.findById(id as string).select('userId').lean().exec();
       if (existingRecord && existingRecord.userId.toString() !== userId) {

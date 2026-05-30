@@ -13,7 +13,7 @@ export class AppError extends Error {
   }
 }
 
-// CN: Proper HTTP status codes reduce retry storms
+
 export const errorHandler = (
   err: AppError | Error,
   req: Request,

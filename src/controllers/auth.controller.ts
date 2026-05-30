@@ -7,12 +7,12 @@ import { User } from '../models/User';
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_key_123';
 
-// Helper to sign JWT token uniformly
+
 const generateToken = (userId: string, email: string): string => {
   return jwt.sign({ id: userId, email }, JWT_SECRET, { expiresIn: '7d' });
 };
 
-// 1. Traditional Email/Password Register
+
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
     const { name, email, password } = req.body;
@@ -28,7 +28,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Hash the password securely
+
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
@@ -50,7 +50,7 @@ const token = generateToken(newUser._id.toString(), newUser.email);
   }
 };
 
-// 2. Traditional Email/Password Login
+
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body;
@@ -71,7 +71,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Validate the password
+
     const isMatch = await bcrypt.compare(password, user.password || '');
     if (!isMatch) {
       res.status(400).json({ message: 'Invalid credentials' });
@@ -89,7 +89,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
-// 3. Google OAuth 2.0 Ingestion Endpoint
+
 export const googleLogin = async (req: Request, res: Response): Promise<void> => {
   try {
     const { idToken } = req.body;
@@ -99,7 +99,7 @@ export const googleLogin = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    // Verify token directly with Google public servers
+
     const ticket = await client.verifyIdToken({
       idToken,
       audience: process.env.GOOGLE_CLIENT_ID,
@@ -114,7 +114,7 @@ export const googleLogin = async (req: Request, res: Response): Promise<void> =>
     let user = await User.findOne({ email: payload.email });
 
     if (!user) {
-      // Create user context if hitting platform for the first time
+ 
       user = await User.create({
         name: payload.name,
         email: payload.email,
@@ -123,7 +123,7 @@ export const googleLogin = async (req: Request, res: Response): Promise<void> =>
         authProvider: 'google',
       });
     } else if (user.authProvider !== 'google') {
-      // Merge account or update googleId context safely if registered locally before
+     
       user.authProvider = 'google';
       user.googleId = payload.sub;
       if (payload.picture) user.avatar = payload.picture;

@@ -22,13 +22,13 @@ const audioUpload = multer({
 router.post('/transcribe', 
   aiRateLimiter, 
   (req: Request, res: Response, next: NextFunction) => {
-    console.log("\n🌐 [VOICE ROUTE] Audio upload incoming...");
+    console.log("\n[VOICE ROUTE] Audio upload incoming...");
     audioUpload.single('audio')(req, res, (err: any) => {
       if (err) {
-        console.error("🚨 [VOICE MULTER CRASH]:", err.message);
+        console.error(" [VOICE MULTER CRASH]:", err.message);
         return res.status(400).json({ success: false, error: err.message });
       }
-      console.log("✅ [VOICE MULTER] Audio buffer parsed safely.");
+      console.log("[VOICE MULTER] Audio buffer parsed safely.");
       next();
     });
   },

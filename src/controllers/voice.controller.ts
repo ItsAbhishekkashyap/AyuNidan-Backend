@@ -8,7 +8,7 @@ export const transcribeVoice = async (
 ): Promise<void> => {
   try {
     console.log("==========================================");
-    console.log("🎙️ [VOICE CONTROLLER] Processing audio note...");
+    console.log(" Processing audio note...");
     console.log("==========================================");
 
     if (!req.file) {
