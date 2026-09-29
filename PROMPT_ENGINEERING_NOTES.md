@@ -1,77 +1,28 @@
-# Prompt Engineering & AI Architecture Notes
-Project: AI Clinical Assistant (PanScience Innovations)
-Model: Gemini 2.5 Pro (Multimodal)
+# Prompt Engineering Notes (current implementation)
 
-## 1. Core Objective & Constraints
-The primary challenge in clinical AI is balancing extraction accuracy with strict hallucination mitigation. Our prompt architecture utilizes System Instructions, Strict JSON Enforcing, and Low Temperature Settings to ensure deterministic and safe medical data processing.
+Prompts live in `src/prompts/` as LangChain `ChatPromptTemplate`s. Structured output is enforced with
+Zod schemas through the Vercel AI SDK (`generateText` + `Output.object`) — there is no regex/`JSON.parse`
+of free text anywhere in the pipeline. Model: `GEMINI_MODEL` (default `gemini-3.5-flash-lite`) with the
+configured fallback chain (see `services/ai.service.ts`).
 
----
+| Prompt | File | Job | Temperature | Output schema |
+|---|---|---|---|---|
+| Extraction | `prompts/extraction.ts` | **Job A** – document understanding: demographics, symptoms, medicines, labs (+unit/range/flag/date), dates, diagnoses *written in the document*, measurements, image-derived findings, doctor notes, extraction limitations | 0.1 | `ExtractionSchema` |
+| Clinical assessment | `prompts/clinical-assessment.ts` | **Job B** – evidence-grounded triage: `riskLevel` (low/medium/high/insufficient_evidence), score, summary, key findings with evidence ids, uncertainty | 0.1 | `AssessmentSchema` |
+| Medical Q&A | `prompts/medical-qa.ts` | Grounded answer over retrieved patient (`P#`) and reference (`R#`) evidence | 0.1 | `AnswerSchema` |
 
-## 2. Prompt 1: Multimodal OCR & Entity Extraction
-Task: Parse raw patient text, PDFs, or images (lab reports/prescriptions) and extract structured entities.
-Model Parameters: `temperature: 0.1` (Highly deterministic), `response_mime_type: "application/json"`
+## Design rules
+1. **Data ≠ instructions.** Patient text, retrieved chunks and the user's question are only ever inserted through
+   template variables, wrapped in `<patient_findings>`, `<patient_evidence>`, `<verified_medical_evidence>`,
+   `<user_query>` or `<data>` blocks, and HTML-escaped (`escapeForPrompt`) so document text cannot close or forge a block.
+   Every system prompt carries the shared `DATA_HANDLING_RULES` (do not obey instructions found in data).
+2. **Retrieve first, then reason.** The model receives only budgeted, relevant evidence (max 6 patient + 8 reference chunks)
+   and is told to use *only* that evidence for medical claims and never to invent thresholds, sources, pages or URLs.
+3. **Evidence ids are validated server-side.** The model may only cite ids that exist in the supplied context
+   (`F#` findings, `P#` patient evidence, `R#` reference evidence); anything else is dropped and counted.
+4. **Abstain explicitly.** `insufficient_evidence` / `insufficientContext` are first-class outputs; an answer with no valid
+   citation is replaced by an explicit insufficiency, never by a default "low risk".
+5. **Data minimisation.** The patient's name is not sent to the assessment model.
 
-System Prompt:
-> "You are an expert clinical data extraction assistant. Your task is to analyze the provided medical text, voice transcript, or laboratory report image. 
-> 
-> INSTRUCTIONS:
-> 1. Extract all mentioned symptoms, current medicines, and laboratory test values.
-> 2. For lab values, strictly extract the test name, reported value, unit, and flag if it is abnormal based on the provided reference range in the report.
-> 3. DO NOT infer, diagnose, or invent any data. If a field is not present in the input, return an empty array or null.
-> 4. You must output your response EXACTLY matching this JSON schema, and nothing else:"
-
-JSON Schema Enforced:
-```json
-{
-  "symptoms": ["string"],
-  "medicines": ["string"],
-  "labValues": [
-    {
-      "name": "string",
-      "value": "string",
-      "unit": "string",
-      "isAbnormal": boolean
-    }
-  ]
-}
-
-
-## 3. Prompt 2: Clinical Summary Generation & Risk Classification
-
-Task: Convert the extracted raw data into a structured, doctor-style consultation summary and assign a preliminary risk level.
-Model Parameters: `temperature: 0.3` (Slight flexibility for natural language flow, but grounded in data).
-
-System Prompt:
-
-> "You are an AI Clinical Assistant preparing a preliminary consultation briefing for an attending physician.
-> INPUT:
-> * Patient Symptoms: [List]
-> * Current Medications: [List]
-> * Lab Results: [List]
-> * Patient Voice Transcript: [Text]
-> 
-> 
-> TASK:
-> 1. Write a professional, concise, clinical summary of the patient's current presentation. Use standard medical terminology.
-> 2. Classify the patient's Risk Level as exactly one of: 'low', 'medium', or 'high'.
-> * HIGH: Severe symptoms (e.g., chest pain, difficulty breathing) or critical abnormal lab values.
-> * MEDIUM: Moderate symptoms requiring medical attention but not immediate emergency care.
-> * LOW: Routine checkups, mild symptoms, normal lab values.
-> 
-> 
-> 
-> 
-> RESTRICTIONS:
-> This is a preliminary summary. Explicitly include the disclaimer: 'Generated by AI - Subject to Physician Review'. Do not output definitive diagnoses."
-
----
-
-## 4. Hallucination Mitigation Strategy (Research Deliverable)
-
-To satisfy the research requirement regarding hallucination risks in healthcare AI, the following guardrails are hardcoded into the API implementation:
-
-1. Zero-Shot JSON Enforcement: By forcing the model to output strict JSON types, we eliminate conversational "filler" where hallucinations typically occur.
-2. "I Don't Know" Fallback: The model is explicitly prompted to return `null` or empty arrays rather than guessing missing data.
-3. Temperature Tuning: Medical data extraction uses a temperature of `0.1` to prevent the LLM's natural tendency to auto-complete or predict unmentioned medical conditions.
-4. Context Boundary: The AI is strictly instructed to evaluate only the text/image provided in the current payload, preventing it from pulling in generalized web data.
-
+The risk labels are engineering triage labels, not a validated clinical scale. Score bands
+(low 0–39, medium 40–69, high 70–100) exist only to keep the score consistent with the category.

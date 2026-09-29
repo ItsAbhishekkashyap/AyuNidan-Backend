@@ -1,43 +1,48 @@
 import { Request, Response } from 'express';
 import { extractMedicalData } from '../services/ai.service';
-import { ApiResponse, ExtractedEntities } from '../types';
+import { validateAudio, AudioValidationError } from '../documents/audio';
+import { logger, errorMeta } from '../utils/logger';
+import { recordFailure } from '../utils/failures';
+import { StageTimer } from '../utils/timing';
+import { aiErrorResponse } from './aiErrors';
 
-export const transcribeVoice = async (
-  req: Request,
-  res: Response<ApiResponse<ExtractedEntities>>
-): Promise<void> => {
+/**
+ * Server-side voice fallback (used when the browser has no live speech recognition):
+ * audio → validation → speech-capable model (Gemini) transcription + extraction in ONE call.
+ * This path returns only a FINAL transcript — it is not live. Every failure is explicit.
+ */
+export const transcribeVoice = async (req: Request, res: Response): Promise<void> => {
+  const audioFile = (req.files as Express.Multer.File[] | undefined)?.[0];
+  if (!audioFile) {
+    res.status(400).json({ success: false, error: 'No audio file provided', failureCategory: 'transcription_failure' });
+    return;
+  }
+
+  const timer = new StageTimer();
   try {
-    console.log("==========================================");
-    console.log(" Processing audio note...");
-    console.log("==========================================");
+    const check = validateAudio(audioFile);
+    const { sourceDocuments: _sourceDocuments, modelReadText: _modelReadText, ...entities } = await timer.time('transcription', () => extractMedicalData('', [audioFile]));
 
-    if (!req.file) {
-      res.status(400).json({
-        success: false,
-        error: 'No audio file provided',
-      });
+    const transcript = entities.rawText.trim();
+    if (!transcript && entities.symptoms.length === 0 && entities.medicines.length === 0 && entities.labValues.length === 0) {
+      recordFailure('transcription_failure', { operation: 'voice', reason: 'empty_transcript' });
+      res.status(422).json({ success: false, error: 'No speech could be transcribed from the recording', failureCategory: 'transcription_failure' });
       return;
     }
 
-    const audioFile = req.file as Express.Multer.File;
-    
-    const extractedEntities = await extractMedicalData(
-      'Extract patient symptoms, medications, and lab values from this voice note.', 
-      [audioFile]
-    );
-
-    audioFile.buffer = Buffer.alloc(0);
-
-    res.status(200).json({
-      success: true,
-      data: extractedEntities,
-    });
+    logger.info('voice.transcribed', { sizeBytes: audioFile.size, durationSec: check.durationSec, ...timer.toLogMeta() });
+    timer.applyHeader(res);
+    res.status(200).json({ success: true, data: { ...entities, transcript, transcriptType: 'final', ...(check.durationSec !== undefined ? { durationSec: check.durationSec } : {}) } });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Audio processing failed';
-    console.error("🔥 Voice Controller Error:", error);
-    res.status(500).json({
-      success: false,
-      error: errorMessage,
-    });
+    if (error instanceof AudioValidationError) {
+      recordFailure('transcription_failure', { operation: 'voice', reason: 'invalid_audio' });
+      res.status(error.status).json({ success: false, error: error.message, failureCategory: error.category });
+      return;
+    }
+    logger.error('voice.extraction_failed', errorMeta(error));
+    const { status, body } = aiErrorResponse(error, 'Audio processing failed');
+    res.status(status).json(body);
+  } finally {
+    audioFile.buffer = Buffer.alloc(0);
   }
 };

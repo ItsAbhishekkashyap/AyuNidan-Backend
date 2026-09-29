@@ -31,3 +31,24 @@ storage/
 .DS_Store?
 Thumbs.db
 ehthumbs.db
+# Evaluation run outputs (regenerate with npm run eval)
+eval/results/
+
+# Local Hugging Face model cache (downloaded on first use)
+.cache/
+
+# Processed reference-ingestion reports (regenerate with npm run kb:ingest)
+medical-reference/processed/
+
+# Generated demo PDF (npm run demo:pdf)
+demo-assets/
+
+# Unused Tesseract model (no OCR engine is used; images are read by the multimodal model)
+*.traineddata
+
+# Copyrighted / licensed source documents and datasets are NOT committed (see the README files in these folders)
+medical-reference/clinical-guidelines/*.pdf
+medical-reference/terminology/**/*.zip
+medical-reference/terminology/**/*.xml
+# Operator's local test PDF (may contain real-looking report data)
+medical-reference/Sample-Smart-Report-Clinics.pdf

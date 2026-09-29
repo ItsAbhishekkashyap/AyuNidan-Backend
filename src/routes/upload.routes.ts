@@ -1,50 +1,14 @@
-import { Router, Request, Response, NextFunction } from "express";
-import multer from "multer";
-import { processReport } from "../controllers/upload.controller";
+import { Router } from 'express';
+import { processReport } from '../controllers/upload.controller';
+import { authGuard } from '../middleware/auth';
+import { aiRateLimiter } from '../middleware/rateLimiter';
+import { reportUpload } from '../middleware/uploadValidation';
+import { validate } from '../middleware/validate';
+import { uploadBodySchema } from '../validation/schemas';
 
 const router = Router();
-const storage = multer.memoryStorage();
 
-const upload = multer({
-  storage,
-  limits: {
-    fileSize: 50 * 1024 * 1024,
-    files: 5,
-  },
-  fileFilter: (req, file, cb) => {
-    const allowed = [
-      "application/pdf",
-      "image/jpeg",
-      "image/png",
-      "image/webp",
-      "text/plain",
-      "audio/mpeg",
-      "audio/wav",
-    ];
-    if (allowed.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error(`Invalid file type detected: ${file.mimetype}`));
-    }
-  },
-});
-
-router.post(
-  "/",
-  (req: Request, res: Response, next: NextFunction) => {
-    
-
-    upload.any()(req, res, (err: any) => {
-      if (err) {
-        console.error("🚨 [MULTER MIDDLEWARE CRASH]:", err.message);
-        return res.status(400).json({ success: false, error: err.message });
-      }
- 
-    
-      next();
-    });
-  },
-  processReport,
-);
+// Auth and rate limiting run BEFORE the multipart parser so unauthenticated requests never buffer files.
+router.post('/', authGuard, aiRateLimiter, reportUpload, validate({ body: uploadBodySchema }), processReport);
 
 export default router;

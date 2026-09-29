@@ -1,5 +1,7 @@
 import mongoose, { ConnectOptions } from 'mongoose';
 import dns from 'node:dns/promises';
+import { getConfig } from './env';
+import { logger, errorMeta } from '../utils/logger';
 
 const MONGODB_OPTIONS: ConnectOptions = {
   maxPoolSize: 10,
@@ -9,66 +11,36 @@ const MONGODB_OPTIONS: ConnectOptions = {
   heartbeatFrequencyMS: 10000,
 };
 
-const getMongoUri = (): string => {
-  const uri = process.env['MONGODB_URI'];
-  if (!uri) {
-    throw new Error('MONGODB_URI is not defined in environment variables');
-  }
-  return uri;
-};
-
 export const connectDB = async (): Promise<void> => {
+  const config = getConfig();
   try {
-    if (process.env.NODE_ENV !== 'production') {
-      dns.setServers(['8.8.8.8', '1.1.1.1']); 
+    if (config.NODE_ENV !== 'production') {
+      dns.setServers(['8.8.8.8', '1.1.1.1']);
     }
     mongoose.set('strictQuery', true);
 
-    if (process.env['NODE_ENV'] === 'development') {
-      mongoose.set(
-        'debug',
-        (
-          collectionName: string,
-          method: string,
-          query: Record<string, unknown>
-        ): void => {
-          console.log(
-            ` ${collectionName}.${method}`,
-            JSON.stringify(query)
-          );
-        }
-      );
+    if (config.NODE_ENV === 'development') {
+      // Log collection + operation only; query filters/documents may contain PHI.
+      mongoose.set('debug', (collectionName: string, method: string): void => {
+        logger.info('db.query', { collection: collectionName, method });
+      });
     }
 
-    await mongoose.connect(getMongoUri(), MONGODB_OPTIONS);
-    console.log('MongoDB Connected with connection pooling');
+    await mongoose.connect(config.MONGODB_URI, MONGODB_OPTIONS);
+    logger.info('db.connected');
 
-    mongoose.connection.on('error', (err: Error): void => {
-      console.error('MongoDB runtime error:', err.message);
-    });
-
-    mongoose.connection.on('disconnected', (): void => {
-      console.warn('MongoDB disconnected. Attempting reconnect...');
-    });
-
-    mongoose.connection.on('reconnected', (): void => {
-      console.log(' MongoDB reconnected');
-    });
-
+    mongoose.connection.on('error', (err: Error) => logger.error('db.runtime_error', errorMeta(err)));
+    mongoose.connection.on('disconnected', () => logger.warn('db.disconnected'));
+    mongoose.connection.on('reconnected', () => logger.info('db.reconnected'));
   } catch (error: unknown) {
-    if (error instanceof Error) {
-      console.error('MongoDB Connection Error:', error.message);
-    } else {
-      console.error('MongoDB Unknown Error');
-    }
+    logger.error('db.connection_failed', errorMeta(error));
     process.exit(1);
   }
 };
 
 const gracefulShutdown = async (signal: string): Promise<void> => {
-  console.log(`\n${signal} received. Closing MongoDB connection...`);
+  logger.info('server.shutdown', { signal });
   await mongoose.connection.close();
-  console.log('MongoDB connection closed.');
   process.exit(0);
 };
 

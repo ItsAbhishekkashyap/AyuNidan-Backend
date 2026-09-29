@@ -1,68 +1,34 @@
-// src/index.ts
-
 import 'dotenv/config';
 
-import express from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import morgan from 'morgan';
-import compression from 'compression';
+import { getConfig, ConfigError } from './config/env';
 import { connectDB } from './config/database';
-import { errorHandler } from './middleware/errorHandler';
-import routes from './routes/index';
+import { createApp } from './app';
+import { logger, errorMeta } from './utils/logger';
+import { getEmbeddings } from './rag/embeddings';
 
+// Fail fast on missing/weak required configuration (e.g. JWT_SECRET) before accepting traffic.
+let port: number;
+try {
+  port = getConfig().PORT;
+} catch (error) {
+  console.error(error instanceof ConfigError ? error.message : 'Failed to load configuration');
+  process.exit(1);
+}
 
-const app = express();
-const PORT = process.env.PORT || 8080;
+const app = createApp();
 
-app.use(compression());
-
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: 'cross-origin' },
-}));
-
-app.use(cors({
-  origin: process.env.NODE_ENV === 'production'
-    ? 'https://ayunidan.vercel.app'
-    : 'http://localhost:3000',
-  methods: ['GET', 'POST', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-
-  maxAge: 86400,
-}));
-
-
-app.use((req, res, next) => {
-  res.setHeader('Connection', 'keep-alive');
-  next();
-});
-
-app.use(morgan('dev'));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-
-
-app.use('/api', routes);
-
-
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'Running',
-    uptime: process.uptime(),
-    memory: process.memoryUsage(),
-    timestamp: new Date().toISOString(),
-  });
-});
-
-
-app.use(errorHandler);
-app.use((err: any, req: any, res: any, next: any) => {
-  console.log("🛑 [GLOBAL CRASH]:", err); // Ye asli error terminal me layega
-  res.status(500).json({ success: false, error: err.message || "Internal server error" });
-});
 connectDB().then(() => {
-  app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+  app.listen(port, () => {
+    logger.info('server.started', { port });
+    // Load the local embedding model in the background so the first upload/query does not
+    // pay the one-time model download/load (measured: ~17 s first download, ~0.4 s cached load).
+    if (process.env.HF_WARMUP !== 'false') {
+      const started = Date.now();
+      getEmbeddings()
+        .embedQuery('warm-up')
+        .then(() => logger.info('embeddings.warm', { model: getEmbeddings().spaceId, loadMs: Date.now() - started }))
+        .catch((error: unknown) => logger.warn('embeddings.warmup_failed', errorMeta(error)));
+    }
   });
 });
 
