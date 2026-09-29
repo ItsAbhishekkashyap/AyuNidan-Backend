@@ -52,3 +52,6 @@ medical-reference/terminology/**/*.zip
 medical-reference/terminology/**/*.xml
 # Operator's local test PDF (may contain real-looking report data)
 medical-reference/Sample-Smart-Report-Clinics.pdf
+
+# Private notes (interview/resume docs) - not published
+docs/
